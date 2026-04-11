@@ -306,20 +306,26 @@ else
   echo "    Node.js $(node -v) installiert."
 fi
 
-echo "==> [3/6] pnpm via corepack..."
-# corepack ist in Node.js 20 eingebaut und legt pnpm nach /usr/local/bin
-# Das ist der einzige Pfad den systemd ohne PATH-Konfiguration findet
-corepack enable
-corepack prepare pnpm@latest --activate
+echo "==> [3/6] pnpm installieren..."
+# npm install -g ist zuverlässiger als corepack (keine Berechtigungsprobleme)
+# pnpm@9 weil paperclip pnpm-workspace.yaml nutzt (kompatibel mit v9)
+npm install -g pnpm@9 2>&1 | grep -v "^npm warn" | tail -3
 
-# Sicherstellen dass pnpm wirklich unter /usr/local/bin liegt
-if ! /usr/local/bin/pnpm --version &>/dev/null; then
-  # Fallback: symlink manuell setzen
-  PNPM_REAL=$(find /root/.local /usr/lib/node_modules -name "pnpm" -type f 2>/dev/null | head -1 || true)
-  [[ -n "$PNPM_REAL" ]] && ln -sf "$PNPM_REAL" /usr/local/bin/pnpm || npm install -g pnpm
+# npm global bin Verzeichnis ermitteln und pnpm dort verlinken
+NPM_BIN=$(npm bin -g 2>/dev/null || echo "/usr/local/bin")
+PNPM_BIN="${NPM_BIN}/pnpm"
+
+# Falls pnpm nicht unter /usr/local/bin liegt — Symlink setzen
+if [[ "$NPM_BIN" != "/usr/local/bin" ]] && [[ -f "$PNPM_BIN" ]]; then
+  ln -sf "$PNPM_BIN" /usr/local/bin/pnpm
 fi
 
-echo "    pnpm $(/usr/local/bin/pnpm -v) unter /usr/local/bin/pnpm"
+# Ausführbar machen (corepack-Berechtigungsproblem vermeiden)
+chmod +x /usr/local/bin/pnpm 2>/dev/null || true
+
+# Selbsttest
+/usr/local/bin/pnpm --version || { echo "FEHLER: pnpm nicht aufrufbar"; exit 1; }
+echo "    pnpm $(/usr/local/bin/pnpm -v) bereit unter /usr/local/bin/pnpm"
 
 echo "==> [4/6] Paperclip klonen..."
 rm -rf /opt/paperclip
